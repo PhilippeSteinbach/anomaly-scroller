@@ -101,7 +101,7 @@
       anomaly: { type: 'stare_figure', progress: 0.55 },
       pal: { wall: '#2a2a32', floor: '#1e1e24', ceiling: '#10101a',
              light: '#8888a8', pillar: '#141420' },
-      hint: 'Stand still. Watch the corridor ahead.',
+      hint: 'Watch the corridor ahead. Something may appear.',
     },
     {
       id: 4,
@@ -1064,8 +1064,9 @@
       }
 
       if (s.type === 'stare_figure' && s.active) {
-        // Fade in proportionally to stare elapsed time
-        s.figureAlpha = clamp(stareElapsed / CFG.STARE_MS, 0, 1);
+        // Fade in over 2.5s of being inside the anomaly window
+        const elapsed = now - s.enteredAt;
+        s.figureAlpha = clamp(elapsed / 2500, 0, 1);
       }
 
       if (s.type === 'visual_shadow' && s.active) {
@@ -1091,8 +1092,8 @@
     respondToAnomaly() {
       if (!this.state) return false;
       if (!this.state.active) return false;
-      if (this.state.type === 'stare_figure' && this.state.figureAlpha < 0.5) {
-        // Figure must be mostly visible before the player can "see" it
+      if (this.state.type === 'stare_figure' && this.state.figureAlpha < 0.3) {
+        // Figure must be at least partially visible
         return false;
       }
       this.state.responded = true;
