@@ -474,27 +474,40 @@ html, body {
 #lb-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
   font-size: 0.72rem;
+}
+
+#lb-table col.col-rank { width: 10%; }
+#lb-table col.col-name { width: 40%; }
+#lb-table col.col-time { width: 22%; }
+#lb-table col.col-date { width: 28%; }
+
+#lb-table th,
+#lb-table td {
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 #lb-table thead th {
   color: var(--accent);
   font-weight: 400;
   letter-spacing: 0.15em;
-  padding: 0.4rem 0.6rem;
   border-bottom: 1px solid var(--dim);
-  text-align: left;
 }
 
-#lb-table thead th:first-child { text-align: center; width: 2.5rem; }
+#lb-table th:first-child,
+#lb-table td:first-child { text-align: center; }
 
 #lb-table tbody td {
-  padding: 0.35rem 0.6rem;
   color: var(--text);
   border-bottom: 1px solid rgba(80,80,90,0.25);
 }
 
-#lb-table tbody td:first-child { text-align: center; color: var(--dim); }
+#lb-table tbody td:first-child { color: var(--dim); }
 
 #lb-table tbody tr.highlight td {
   color: var(--bright);

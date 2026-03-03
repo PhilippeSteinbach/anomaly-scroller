@@ -1272,10 +1272,6 @@
       document.getElementById('btn-leaderboard') .addEventListener('click', () => this._showLeaderboard());
       document.getElementById('btn-lb-victory')  .addEventListener('click', () => this._showLeaderboard());
       document.getElementById('btn-lb-back')     .addEventListener('click', () => this._setState(this._lbReturnState || STATE.MENU));
-      document.getElementById('btn-lb-clear')    .addEventListener('click', () => {
-        this.leaderboard.clear();
-        this._renderLeaderboard();
-      });
 
       // Prevent scroll input from propagating when typing in name field
       document.getElementById('player-name').addEventListener('keydown', (e) => e.stopPropagation());
