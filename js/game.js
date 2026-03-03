@@ -1209,6 +1209,7 @@
       this.$secNum  = document.getElementById('section-num');
       this.$pfill   = document.getElementById('progress-fill');
       this.$pdot    = document.getElementById('progress-dot');
+      this.$timer   = document.getElementById('hud-timer');
       this.$stareRing   = document.getElementById('stare-ring');
       this.$msgBanner   = document.getElementById('msg-banner');
       this.$scrollHint  = document.getElementById('scroll-hint');
@@ -1551,6 +1552,10 @@
       const pct = clamp((this.scrollPos / level.length) * 100, 0, 100);
       this.$pfill.style.width = `${pct}%`;
       this.$pdot.style.left   = `${pct}%`;
+
+      // Timer display
+      const elapsed = now - this._runStartT;
+      this.$timer.textContent = this.leaderboard._fmtTime(elapsed);
     }
 
     _render(now) {
