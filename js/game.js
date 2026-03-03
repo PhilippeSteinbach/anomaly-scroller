@@ -98,29 +98,30 @@
       name: 'SECTION 03',
       length: 11000,
       hasAnomaly: true,
-      anomaly: { type: 'visual_poster', progress: 0.55 },
+      anomaly: { type: 'stare_figure', progress: 0.55 },
       pal: { wall: '#2a2a32', floor: '#1e1e24', ceiling: '#10101a',
              light: '#8888a8', pillar: '#141420' },
-      hint: 'Something is different this time.',
+      hint: 'Stand still. Watch the corridor ahead.',
     },
     {
       id: 4,
       name: 'SECTION 04',
       length: 9500,
-      hasAnomaly: false,
+      hasAnomaly: true,
+      anomaly: { type: 'temporal_slow', progress: 0.48 },
       pal: { wall: '#282828', floor: '#1c1c1c', ceiling: '#0e0e0e',
              light: '#888898', pillar: '#141418' },
-      hint: 'Stay focused. Trust nothing.',
+      hint: 'If time slows down, something is wrong.',
     },
     {
       id: 5,
       name: 'SECTION 05',
       length: 12000,
       hasAnomaly: true,
-      anomaly: { type: 'visual_poster', progress: 0.38 },
+      anomaly: { type: 'visual_shadow', progress: 0.38 },
       pal: { wall: '#262632', floor: '#1a1a24', ceiling: '#0c0c14',
              light: '#808098', pillar: '#121218' },
-      hint: 'The walls have something to say.',
+      hint: 'Shadows should follow the light.',
     },
     {
       id: 6,
@@ -370,6 +371,10 @@
       this._anomMatAnom = null;
       this._figureMesh  = null;
       this._anomActive  = false;
+      this._shadowMesh  = null;    // visual_shadow anomaly
+      this._shadowBaseY = 0;
+      this._temporalOverlay = null; // temporal_slow overlay
+      this._baseFOV     = 72;
 
       // Full-screen flash overlay (child of camera so it moves with it)
       const fGeo = new THREE.PlaneGeometry(4, 4);
@@ -381,6 +386,17 @@
       flash.position.z = -0.2;
       flash.renderOrder = 999;
       this.cam.add(flash);
+
+      // Temporal slow overlay (blue tint, camera child)
+      const tGeo = new THREE.PlaneGeometry(4, 4);
+      this._temporalMat = new THREE.MeshBasicMaterial({
+        color: 0x1020a0, transparent: true, opacity: 0,
+        depthTest: false, depthWrite: false,
+      });
+      const tMesh = new THREE.Mesh(tGeo, this._temporalMat);
+      tMesh.position.z = -0.19;
+      tMesh.renderOrder = 998;
+      this.cam.add(tMesh);
 
       this.cam.position.y = this.EY;
     }
@@ -418,6 +434,8 @@
       const pal = level.pal;
       this._anomPoster = null;
       this._anomActive = false;
+      this._shadowMesh = null;
+      this._figureMesh = null;
 
       this._buildCorridor(len, pal);
       this._buildFixtures(len, pal);
@@ -427,6 +445,7 @@
       this._buildExitSigns(len);
       this._buildHazardStripes(len);
       this._buildFigure(level);
+      this._buildShadow(level);
 
       // Fog + background
       this.scene.fog = new THREE.FogExp2(new THREE.Color(pal.ceiling), 0.025);
@@ -447,6 +466,9 @@
 
       this.cam.position.set(0, this.EY, 0);
       this.cam.rotation.set(0, 0, 0);
+      this.cam.fov = this._baseFOV;
+      this.cam.updateProjectionMatrix();
+      this._temporalMat.opacity = 0;
     }
 
     // ── Per-frame draw (same interface as the old 2-D version) ─
@@ -476,12 +498,44 @@
       // Anomaly poster swap
       this._updateAnomalyPoster(anomSt, now);
 
-      // Stare figure
+      // Stare figure — fade in via material opacity
       if (this._figureMesh) {
         const vis = anomSt && anomSt.type === 'stare_figure'
                     && anomSt.figureAlpha > 0;
         this._figureMesh.visible = !!vis;
-        if (vis) this._figureMesh.material.opacity = anomSt.figureAlpha;
+        if (vis) {
+          this._figureMat.opacity = anomSt.figureAlpha;
+          // Subtle flicker when partially visible
+          if (anomSt.figureAlpha < 0.9) {
+            this._figureMat.opacity *= 0.85 + 0.15 * Math.sin(now * 0.02);
+          }
+        }
+      }
+
+      // Temporal slow — blue overlay + FOV shift
+      if (anomSt && anomSt.type === 'temporal_slow' && anomSt.active) {
+        this._temporalMat.opacity = 0.12 + 0.04 * Math.sin(now * 0.004);
+        const targetFOV = 62;
+        this.cam.fov += (targetFOV - this.cam.fov) * 0.05;
+        this.cam.updateProjectionMatrix();
+      } else {
+        this._temporalMat.opacity *= 0.9; // fade out
+        if (Math.abs(this.cam.fov - this._baseFOV) > 0.1) {
+          this.cam.fov += (this._baseFOV - this.cam.fov) * 0.05;
+          this.cam.updateProjectionMatrix();
+        }
+      }
+
+      // Visual shadow — drift in wrong direction
+      if (this._shadowMesh) {
+        const active = anomSt && anomSt.type === 'visual_shadow' && anomSt.active;
+        this._shadowMesh.visible = !!active;
+        if (active) {
+          this._shadowMat.opacity = 0.5 + 0.15 * Math.sin(now * 0.003);
+          // Shadow drifts upward (wrong direction — should follow light downward)
+          const drift = anomSt.phase * 0.8;
+          this._shadowMesh.position.y = this._shadowBaseY + drift;
+        }
       }
 
       this._r.render(this.scene, this.cam);
@@ -692,16 +746,81 @@
     _buildFigure(level) {
       this._figureMesh = null;
       if (!level.hasAnomaly || level.anomaly.type !== 'stare_figure') return;
-      const bGeo = new THREE.BoxGeometry(0.3, 1.8, 0.15);
-      const bMat = new THREE.MeshBasicMaterial({
+
+      const mat = new THREE.MeshBasicMaterial({
         color: 0x000000, transparent: true, opacity: 0,
       });
-      const fig    = new THREE.Mesh(bGeo, bMat);
-      const trigZ  = -level.anomaly.progress * level.length * this.S;
-      fig.position.set(0, 0.9, trigZ - 6);
-      fig.visible      = false;
-      this._figureMesh = fig;
-      this._grp.add(fig);
+
+      // Composite humanoid silhouette: head, torso, arms, legs
+      const grp = new THREE.Group();
+
+      // Head
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), mat);
+      head.position.y = 1.65;
+      grp.add(head);
+
+      // Torso
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.6, 0.18), mat);
+      torso.position.y = 1.25;
+      grp.add(torso);
+
+      // Arms
+      for (const side of [-1, 1]) {
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.55, 0.1), mat);
+        arm.position.set(side * 0.22, 1.22, 0);
+        grp.add(arm);
+      }
+
+      // Legs
+      for (const side of [-1, 1]) {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.7, 0.12), mat);
+        leg.position.set(side * 0.1, 0.55, 0);
+        grp.add(leg);
+      }
+
+      const trigZ = -level.anomaly.progress * level.length * this.S;
+      grp.position.set(0, 0, trigZ - 8);
+      grp.visible = false;
+      this._figureMesh = grp;
+      this._figureMat  = mat;
+      this._grp.add(grp);
+    }
+
+    _buildShadow(level) {
+      this._shadowMesh = null;
+      if (!level.hasAnomaly || level.anomaly.type !== 'visual_shadow') return;
+
+      // Human-shaped shadow silhouette on left wall
+      const shadowGrp = new THREE.Group();
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0x000000, transparent: true, opacity: 0, side: THREE.DoubleSide,
+      });
+
+      // Shadow head
+      const head = new THREE.Mesh(new THREE.CircleGeometry(0.15, 12), mat);
+      head.position.y = 1.7;
+      shadowGrp.add(head);
+
+      // Shadow body
+      const body = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 1.1), mat);
+      body.position.y = 1.0;
+      shadowGrp.add(body);
+
+      // Shadow legs
+      for (const side of [-0.1, 0.1]) {
+        const leg = new THREE.Mesh(new THREE.PlaneGeometry(0.14, 0.5), mat);
+        leg.position.set(side, 0.3, 0);
+        shadowGrp.add(leg);
+      }
+
+      const trigZ = -level.anomaly.progress * level.length * this.S;
+      shadowGrp.rotation.y = Math.PI / 2;
+      shadowGrp.position.set(-this.CW / 2 + 0.01, 0, trigZ);
+      shadowGrp.visible = false;
+      this._shadowMesh  = shadowGrp;
+      this._shadowMat   = mat;
+      this._shadowBaseY = 0;
+      this._grp.add(shadowGrp);
     }
 
     // ── Per-frame helpers ──────────────────────────────────────

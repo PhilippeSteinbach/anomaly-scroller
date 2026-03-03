@@ -23,20 +23,19 @@ A **Staring mechanic** rewards patience: standing still for 3 seconds at certain
 |---|---|
 | **Genre** | Observation Horror · Puzzle · Point & Click |
 | **Platform** | Web Browser (Desktop & Mobile) |
-| **Controls** | Mouse-wheel / Touch-swipe (primary) · Arrow keys · ↩ Reverse button |
+| **Controls** | Mouse-wheel / Touch-swipe (primary) · Arrow keys · ⚠ Anomaly button |
 
 ---
 
 ## Gameplay Mechanics
 
-### Parallax Scrolling
-The environment is built from three horizontally-scrolling layers at different speeds, creating an illusion of depth without 3-D rendering:
+### 3-D First-Person Corridor
+The environment is a Three.js first-person 3-D corridor extending along the −Z axis. The camera moves with scroll position, creating natural depth perception:
 
-| Layer | Parallax rate | Content |
-|---|---|---|
-| Background | 0.15× | Far tile-wall grid, ambient light pools |
-| Midground  | 0.45× | Main wall tiles, ceiling panels, posters, doors, exit signs |
-| Foreground | 0.90× | Structural pillars, overhead cables, floor hazard stripes |
+- Procedural tile textures for walls, floor, and ceiling (PBR materials)
+- Dynamic point-light pool (12 lights) repositioned near camera each frame
+- FogExp2 for atmospheric depth fade
+- Walking bob + camera shake on anomaly events
 
 ### Loop Logic
 ```
@@ -47,9 +46,9 @@ Section start (pos = 0) ──────────────────�
 ```
 
 - Player enters the **anomaly window** → anomaly activates (poster changes, figure appears, speed slows, shadow moves wrong).
-- Player **reverses** inside the window → enters RETURNING state; must reach pos ≤ 100 to clear.
-- Player **reaches end** without reversing on an anomaly level → FAIL.
-- Player **reverses** on a no-anomaly level → FAIL (false alarm).
+- Player **signals anomaly** (⚠ button) inside the window → enters RETURNING state; must reach pos ≤ 100 to clear.
+- Player **reaches end** without signaling on an anomaly level → FAIL.
+- Player **signals anomaly** on a no-anomaly level → FAIL (false alarm).
 
 ### Staring Feature
 If the player stops scrolling for **3 seconds** while inside an anomaly window of type `stare_figure`, a dark silhouette gradually fades in on the back wall. The player must then reverse to clear the section.
@@ -85,11 +84,11 @@ If the player stops scrolling for **3 seconds** while inside an anomaly window o
 
 | Concern | Choice | Reason |
 |---|---|---|
-| Rendering | Single `<canvas>` + Canvas 2D API | Frame-accurate per-layer drawing; no external dependencies |
-| Parallax | Manual offset per layer each frame | Full control; GPU-composited via browser |
+| Rendering | Three.js r128 (CDN) | 3-D first-person corridor with PBR materials, dynamic lights, fog |
 | Audio | Web Audio API | Procedural sounds — no asset files required |
-| Assets | Zero external files | Everything drawn procedurally (tiles, posters, pillars) |
+| Assets | Zero external files | Everything drawn procedurally (tiles, posters, pillars, silhouettes) |
 | Build | None (plain HTML/CSS/JS) | Open directly in any browser |
+| Dependency | `three.min.js` r128 via cdnjs | Single CDN script tag, no bundler needed |
 
 ---
 
@@ -113,9 +112,9 @@ anomaly-scroller/
 ├── css/
 │   └── style.css       ← Liminal aesthetic, HUD, screen transitions, glitch title
 └── js/
-    └── game.js         ← Complete game logic (single IIFE, ~750 lines)
+    └── game.js         ← Complete game logic (single IIFE, ~1400 lines)
                            ├── AudioSystem      (Web Audio: drone, steps, sting, chords)
-                           ├── Renderer         (procedural canvas drawing, 3 layers)
+                           ├── Renderer         (Three.js 3-D corridor, PBR, dynamic lights)
                            ├── InputController  (wheel, touch, keyboard)
                            ├── StareDetector    (3-second idle timer)
                            ├── AnomalySystem    (visibility window, per-type state)
