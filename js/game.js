@@ -5,7 +5,7 @@
  * Architecture
  * ────────────
  *  AudioSystem      – Web Audio API sounds (ambient drone, steps, stings)
- *  Renderer         – Single-canvas procedural drawing; 3 parallax layers
+ *  Renderer         – Three.js 3-D corridor renderer
  *  InputController  – Mouse-wheel, touch-swipe, keyboard arrows
  *  StareDetector    – Fires after CFG.STARE_MS of no movement
  *  AnomalySystem    – Per-level anomaly state & visibility rules
@@ -14,24 +14,25 @@
 (function () {
   'use strict';
 
+
   // ════════════════════════════════════════════════════════════
   //  CONFIGURATION
   // ════════════════════════════════════════════════════════════
   const CFG = {
-    SCROLL_FACTOR:       3,      // virtual units per raw wheel delta unit
-    MAX_SCROLL_DELTA:    80,     // clamp individual wheel events
+    SCROLL_FACTOR:       2,      // virtual units per raw wheel delta unit
+    MAX_SCROLL_DELTA:    60,     // clamp individual wheel events
     STARE_MS:            3000,   // ms of no movement before stare fires
     RETURN_THRESHOLD:    100,    // virtual units from 0 counted as "at start"
     END_THRESHOLD:       120,    // virtual units from end counted as "at end"
     // Anomaly becomes "visible" this many virtual units before its trigger point
-    ANOMALY_LEAD:        300,
+    ANOMALY_LEAD:        600,
     // …and remains visible this many units past it
-    ANOMALY_TRAIL:       500,
+    ANOMALY_TRAIL:       900,
 
     // Parallax rates (fraction of scroll delta applied to each layer)
-    P_BG:  0.15,
-    P_MID: 0.45,
-    P_FG:  0.90,
+    P_BG:  0.20,
+    P_MID: 0.55,
+    P_FG:  1.00,
 
     // Scene geometry constants
     TILE_W:          80,
@@ -67,68 +68,67 @@
     {
       id: 0,
       name: 'SECTION 00',
-      length: 3000,
+      length: 8000,
       hasAnomaly: false,
-      pal: { wall: '#22222c', floor: '#181820', ceiling: '#0d0d12',
-             light: '#9090a8', pillar: '#141418' },
+      pal: { wall: '#2a2a38', floor: '#1e1e28', ceiling: '#12121a',
+             light: '#a8a8c8', pillar: '#18181e' },
       hint: 'Scroll to the end of the section.',
     },
     {
       id: 1,
       name: 'SECTION 01',
-      length: 3500,
+      length: 10000,
       hasAnomaly: true,
       anomaly: { type: 'visual_poster', progress: 0.40 },
-      pal: { wall: '#1e1e28', floor: '#161620', ceiling: '#0b0b10',
-             light: '#8888a8', pillar: '#121218' },
+      pal: { wall: '#2c2c34', floor: '#202028', ceiling: '#101018',
+             light: '#9898b8', pillar: '#161620' },
       hint: 'Observe the walls carefully.',
     },
     {
       id: 2,
       name: 'SECTION 02',
-      length: 3200,
+      length: 9000,
       hasAnomaly: false,
-      pal: { wall: '#202020', floor: '#161616', ceiling: '#0c0c0c',
-             light: '#888888', pillar: '#131313' },
+      pal: { wall: '#282830', floor: '#1c1c24', ceiling: '#0e0e14',
+             light: '#9090a0', pillar: '#151520' },
       hint: 'Keep moving. Do not hesitate.',
     },
     {
       id: 3,
       name: 'SECTION 03',
-      length: 4000,
+      length: 11000,
       hasAnomaly: true,
-      anomaly: { type: 'stare_figure', progress: 0.55 },
-      pal: { wall: '#1a1a22', floor: '#121218', ceiling: '#090909',
-             light: '#707088', pillar: '#0f0f12' },
-      hint: 'Stop and wait. Some things take time to appear.',
+      anomaly: { type: 'visual_poster', progress: 0.55 },
+      pal: { wall: '#2a2a32', floor: '#1e1e24', ceiling: '#10101a',
+             light: '#8888a8', pillar: '#141420' },
+      hint: 'Something is different this time.',
     },
     {
       id: 4,
       name: 'SECTION 04',
-      length: 3500,
-      hasAnomaly: true,
-      anomaly: { type: 'temporal_slow', progress: 0.48 },
-      pal: { wall: '#1c1c1c', floor: '#141414', ceiling: '#0a0a0a',
-             light: '#808080', pillar: '#111111' },
-      hint: 'Pay attention to how movement feels.',
+      length: 9500,
+      hasAnomaly: false,
+      pal: { wall: '#282828', floor: '#1c1c1c', ceiling: '#0e0e0e',
+             light: '#888898', pillar: '#141418' },
+      hint: 'Stay focused. Trust nothing.',
     },
     {
       id: 5,
       name: 'SECTION 05',
-      length: 4200,
+      length: 12000,
       hasAnomaly: true,
-      anomaly: { type: 'visual_shadow', progress: 0.38 },
-      pal: { wall: '#181818', floor: '#111111', ceiling: '#070707',
-             light: '#686868', pillar: '#0d0d0d' },
-      hint: 'The shadows do not lie.',
+      anomaly: { type: 'visual_poster', progress: 0.38 },
+      pal: { wall: '#262632', floor: '#1a1a24', ceiling: '#0c0c14',
+             light: '#808098', pillar: '#121218' },
+      hint: 'The walls have something to say.',
     },
     {
       id: 6,
       name: 'SECTION 06',
-      length: 4500,
+      length: 10000,
       hasAnomaly: false,
-      pal: { wall: '#141414', floor: '#0e0e0e', ceiling: '#050505',
-             light: '#585858', pillar: '#0a0a0a' },
+      pal: { wall: '#242430', floor: '#181822', ceiling: '#0a0a12',
+             light: '#787890', pillar: '#101016' },
       hint: 'Final section. You are almost free.',
     },
   ];
@@ -332,523 +332,463 @@
   }
 
   // ════════════════════════════════════════════════════════════
-  //  RENDERER
+  //  RENDERER  (Three.js)
   // ════════════════════════════════════════════════════════════
   /**
-   * Draws the corridor scene on a single <canvas> each frame.
+   * First-person 3-D corridor renderer using Three.js.
    *
-   * Scene layout (vertical bands):
-   *   0  – 18% height  → ceiling (dark panels + fluorescent tubes)
-   *   18 – 78% height  → wall    (tile grid, posters, doors, signs)
-   *   78 – 100% height → floor   (tile grid)
-   *
-   * Three parallax offsets are supplied each frame:
-   *   bgOff  = scrollPos * P_BG   (slowest — far tiles, ambient light)
-   *   midOff = scrollPos * P_MID  (main wall content)
-   *   fgOff  = scrollPos * P_FG   (foreground pillars)
+   * The corridor extends along the −Z axis.  Camera moves with scroll.
+   * Procedural canvas textures for walls / floor / ceiling / posters.
+   * Dynamic point-light pool repositioned each frame near the camera.
    */
   class Renderer {
     constructor(canvas) {
-      this.canvas = canvas;
-      this.ctx    = canvas.getContext('2d');
-      this._resize();
+      this._r = new THREE.WebGLRenderer({ canvas, antialias: true });
+      this._r.setSize(window.innerWidth, window.innerHeight);
+      this._r.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      this._r.toneMapping = THREE.ACESFilmicToneMapping;
+      this._r.toneMappingExposure = 0.7;
+
+      this.scene = new THREE.Scene();
+      this.cam = new THREE.PerspectiveCamera(
+        72, window.innerWidth / window.innerHeight, 0.05, 200,
+      );
+      this.scene.add(this.cam);
+
+      // virtual → Three.js scale  (10 000 units ≈ 100 m)
+      this.S  = 0.01;
+      this.CW = 5;      // corridor width  (m)
+      this.CH = 3.5;    // corridor height (m)
+      this.EY = 1.6;    // eye height      (m)
+
+      // Level-specific state
+      this._grp         = null;
+      this._poolLights  = [];
+      this._fixZs       = [];
+      this._anomPoster  = null;
+      this._anomMatNorm = null;
+      this._anomMatAnom = null;
+      this._figureMesh  = null;
+      this._anomActive  = false;
+
+      // Full-screen flash overlay (child of camera so it moves with it)
+      const fGeo = new THREE.PlaneGeometry(4, 4);
+      this._flashMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0,
+        depthTest: false, depthWrite: false,
+      });
+      const flash = new THREE.Mesh(fGeo, this._flashMat);
+      flash.position.z = -0.2;
+      flash.renderOrder = 999;
+      this.cam.add(flash);
+
+      this.cam.position.y = this.EY;
     }
 
-    _resize() {
-      this.canvas.width  = window.innerWidth;
-      this.canvas.height = window.innerHeight;
-      this.W  = this.canvas.width;
-      this.H  = this.canvas.height;
-      const H = this.H, W = this.W;
-      // Pre-computed layout constants
-      this.L = {
-        ceilH:   Math.floor(H * 0.18),
-        wallY:   Math.floor(H * 0.18),
-        wallBot: Math.floor(H * 0.78),
-        wallH:   Math.floor(H * 0.60),
-        floorY:  Math.floor(H * 0.78),
-        posterY: Math.floor(H * 0.25),
-        posterW: Math.max(60,  Math.floor(W * 0.055)),
-        posterH: Math.max(90,  Math.floor(H * 0.22)),
-      };
+    onResize() {
+      this.cam.aspect = window.innerWidth / window.innerHeight;
+      this.cam.updateProjectionMatrix();
+      this._r.setSize(window.innerWidth, window.innerHeight);
     }
 
-    onResize() { this._resize(); }
+    // ── Build the 3-D scene for one level ──────────────────────
 
-    // ── Public draw entry-point ────────────────────────────────
+    initLevel(level) {
+      // Dispose previous geometry / materials
+      if (this._grp) {
+        this._grp.traverse(o => {
+          if (o.geometry) o.geometry.dispose();
+          if (o.material) [].concat(o.material).forEach(m => {
+            if (m.map) m.map.dispose();
+            m.dispose();
+          });
+        });
+        this.scene.remove(this._grp);
+      }
+      this._poolLights.forEach(l => this.scene.remove(l));
+      this._poolLights = [];
+      this.scene.children
+        .filter(c => c.isAmbientLight)
+        .forEach(l => this.scene.remove(l));
 
-    /**
-     * @param {number}  scrollPos   – current virtual scroll position
-     * @param {object}  level       – current LEVELS entry
-     * @param {object}  anomSt      – anomaly state from AnomalySystem
-     * @param {number}  glitchAlpha – 0..1 overlay glitch intensity
-     * @param {number}  flashAlpha  – 0..1 white flash intensity
-     * @param {number}  now         – performance.now() for animation
-     */
-    draw(scrollPos, level, anomSt, glitchAlpha, flashAlpha, now) {
-      const bgOff  = scrollPos * CFG.P_BG;
-      const midOff = scrollPos * CFG.P_MID;
-      const fgOff  = scrollPos * CFG.P_FG;
+      this._grp = new THREE.Group();
+      this.scene.add(this._grp);
 
-      this._drawBg(bgOff,   level, anomSt, now);
-      this._drawMid(midOff, level, anomSt, now);
-      this._drawFg(fgOff,   level);
-      this._drawEffects(scrollPos, anomSt, glitchAlpha, flashAlpha, now);
-    }
-
-    // ── Background layer ───────────────────────────────────────
-
-    _drawBg(off, level, anomSt, now) {
-      const { ctx, W, H, L } = this;
+      const len = level.length * this.S;
       const pal = level.pal;
+      this._anomPoster = null;
+      this._anomActive = false;
 
-      // Ceiling fill
-      ctx.fillStyle = pal.ceiling;
-      ctx.fillRect(0, 0, W, L.ceilH);
+      this._buildCorridor(len, pal);
+      this._buildFixtures(len, pal);
+      this._buildPillars(len, pal);
+      this._buildPosters(len, level);
+      this._buildDoors(len, pal);
+      this._buildExitSigns(len);
+      this._buildHazardStripes(len);
+      this._buildFigure(level);
 
-      // Wall base
-      ctx.fillStyle = pal.wall;
-      ctx.fillRect(0, L.wallY, W, L.wallH);
+      // Fog + background
+      this.scene.fog = new THREE.FogExp2(new THREE.Color(pal.ceiling), 0.025);
+      this.scene.background = new THREE.Color(pal.ceiling);
 
-      // Floor base
-      ctx.fillStyle = pal.floor;
-      ctx.fillRect(0, L.floorY, W, H - L.floorY);
+      // Ambient light
+      this.scene.add(new THREE.AmbientLight(new THREE.Color(pal.light), 0.12));
 
-      // Far-wall tile grid (very faint, slow parallax)
-      this._drawTileGrid(off, L.wallY, L.wallBot, pal.wall, 0.22);
-
-      // Ambient light pools between ceiling fixtures
-      this._drawLightPools(off, pal);
-
-      // Stare figure (back-wall layer, appears after 3 s staring)
-      if (anomSt && anomSt.type === 'stare_figure' && anomSt.figureAlpha > 0) {
-        this._drawFigure(off, anomSt.figureAlpha, now);
-      }
-    }
-
-    _drawTileGrid(off, yTop, yBot, baseCol, opacity) {
-      const { ctx, W } = this;
-      const tW = CFG.TILE_W * 1.5;
-      const tH = CFG.TILE_H * 1.5;
-      const r  = parseInt(baseCol.slice(1, 3), 16);
-      const g  = parseInt(baseCol.slice(3, 5), 16);
-      const b  = parseInt(baseCol.slice(5, 7), 16);
-      ctx.strokeStyle = `rgba(${r + 20},${g + 20},${b + 20},${opacity})`;
-      ctx.lineWidth   = 1;
-      const sx = -(off % tW);
-      for (let x = sx; x < W + tW; x += tW) {
-        ctx.beginPath(); ctx.moveTo(x, yTop); ctx.lineTo(x, yBot); ctx.stroke();
-      }
-      for (let y = yTop; y <= yBot; y += tH) {
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-      }
-    }
-
-    _drawLightPools(off, pal) {
-      const { ctx, W, H, L } = this;
-      const sp  = CFG.LIGHT_SPACING;
-      const sx  = Math.floor(off / sp) * sp - off;
-      for (let x = sx - sp; x < W + sp * 2; x += sp) {
-        const gr = ctx.createRadialGradient(x, L.wallY, 0, x, L.wallY, 220);
-        gr.addColorStop(0, `rgba(140,140,170,0.055)`);
-        gr.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = gr;
-        ctx.fillRect(x - 240, 0, 480, H * 0.75);
-      }
-    }
-
-    _drawFigure(off, alpha, now) {
-      const { ctx, W, H, L } = this;
-      // Silhouette standing at far end of corridor
-      const figW = Math.floor(W * 0.025);
-      const figH = Math.floor(H * 0.38);
-      const cx   = W * 0.5 - (off * 0.05);  // very slow horizontal drift
-      const figX = cx - figW / 2;
-      const figY = L.wallBot - figH;
-
-      // Slight flicker
-      const flicker = 0.85 + Math.sin(now / 90) * 0.12;
-      ctx.save();
-      ctx.globalAlpha = clamp(alpha * flicker, 0, 1);
-
-      // Body silhouette (head + torso + legs)
-      ctx.fillStyle = '#000000';
-      const headR = figW * 0.7;
-      ctx.beginPath();
-      ctx.arc(cx, figY + headR, headR, 0, Math.PI * 2);
-      ctx.fill();
-      // Torso
-      ctx.fillRect(figX + figW * 0.15, figY + headR * 2, figW * 0.7, figH * 0.5);
-      // Legs
-      ctx.fillRect(figX + figW * 0.15, figY + headR * 2 + figH * 0.5, figW * 0.28, figH * 0.28);
-      ctx.fillRect(figX + figW * 0.57, figY + headR * 2 + figH * 0.5, figW * 0.28, figH * 0.28);
-
-      ctx.globalAlpha = 1;
-      ctx.restore();
-    }
-
-    // ── Midground layer ────────────────────────────────────────
-
-    _drawMid(off, level, anomSt, now) {
-      const { ctx, W, H, L } = this;
-      const pal = level.pal;
-
-      // ── Ceiling panels + fluorescent tubes
-      this._drawCeilingPanels(off, pal);
-
-      // ── Wall tile detail
-      this._drawWallTiles(off, pal);
-
-      // ── Floor tiles
-      this._drawFloorTiles(off, pal);
-
-      // ── Horizontal trim bands
-      ctx.fillStyle = darken(pal.wall, 0.45);
-      ctx.fillRect(0, L.wallY, W, 3);       // ceiling–wall seam
-      ctx.fillRect(0, L.floorY - 5, W, 5); // dado at floor
-
-      // Dado rail (1/3 up wall)
-      ctx.fillStyle = darken(pal.wall, 0.55);
-      ctx.fillRect(0, L.wallY + Math.floor(L.wallH * 0.32), W, 3);
-
-      // ── Posters
-      this._drawPosters(off, level, anomSt, now);
-
-      // ── Door frames
-      this._drawDoors(off, pal);
-
-      // ── Emergency exit signs
-      this._drawExitSigns(off);
-
-      // ── Wrong shadow (anomaly)
-      if (anomSt && anomSt.type === 'visual_shadow' && anomSt.active) {
-        this._drawWrongShadow(off, anomSt.phase, now);
-      }
-    }
-
-    _drawCeilingPanels(off, pal) {
-      const { ctx, W, L } = this;
-      const pW = 280;
-      const sx = -(off % pW);
-      for (let x = sx - pW; x < W + pW * 2; x += pW) {
-        // Panel body
-        ctx.fillStyle = lighten(pal.ceiling, 0.14);
-        ctx.fillRect(x + 4, 2, pW - 8, L.ceilH - 4);
-
-        // Fluorescent tube
-        ctx.fillStyle = pal.light;
-        ctx.fillRect(x + 22, L.ceilH * 0.33, pW - 44, L.ceilH * 0.16);
-
-        // Soft glow downward from tube
-        const gr = ctx.createLinearGradient(0, L.ceilH * 0.5, 0, L.ceilH + 90);
-        gr.addColorStop(0, 'rgba(140,140,170,0.10)');
-        gr.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = gr;
-        ctx.fillRect(x, L.ceilH * 0.5, pW, 90);
-      }
-      // Bottom edge of ceiling
-      ctx.fillStyle = darken(pal.ceiling, 0.5);
-      ctx.fillRect(0, L.ceilH - 2, W, 2);
-    }
-
-    _drawWallTiles(off, pal) {
-      const { ctx, W, L } = this;
-      const tW = CFG.TILE_W, tH = CFG.TILE_H;
-      const tileA = lighten(pal.wall, 0.09);
-      const tileB = lighten(pal.wall, 0.04);
-      const sx    = -(off % tW);
-
-      for (let x = sx - tW; x < W + tW * 2; x += tW) {
-        const col = Math.floor((x + off) / tW);
-        for (let y = L.wallY; y < L.wallBot; y += tH) {
-          const row = Math.floor((y - L.wallY) / tH);
-          ctx.fillStyle = (col + row) % 2 === 0 ? tileA : tileB;
-          ctx.fillRect(x + 1, y + 1, tW - 2, tH - 2);
-        }
-      }
-
-      // Grout lines
-      ctx.strokeStyle = darken(pal.wall, 0.65);
-      ctx.lineWidth   = 1;
-      for (let x = sx - tW; x < W + tW * 2; x += tW) {
-        ctx.beginPath(); ctx.moveTo(x, L.wallY); ctx.lineTo(x, L.wallBot); ctx.stroke();
-      }
-      for (let y = L.wallY; y <= L.wallBot; y += tH) {
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-      }
-    }
-
-    _drawFloorTiles(off, pal) {
-      const { ctx, W, H, L } = this;
-      const tW = Math.floor(CFG.TILE_W * 1.1);
-      const tH = Math.floor(CFG.TILE_H * 0.85);
-      const tileA = lighten(pal.floor, 0.12);
-      const tileB = lighten(pal.floor, 0.06);
-      const sx    = -(off % tW);
-
-      for (let x = sx - tW; x < W + tW * 2; x += tW) {
-        const col = Math.floor((x + off) / tW);
-        for (let y = L.floorY; y < H + tH; y += tH) {
-          const row = Math.floor((y - L.floorY) / tH);
-          ctx.fillStyle = (col + row) % 2 === 0 ? tileA : tileB;
-          ctx.fillRect(x + 1, y + 1, tW - 2, tH - 2);
-        }
-      }
-      ctx.strokeStyle = darken(pal.floor, 0.65);
-      ctx.lineWidth   = 1;
-      for (let x = sx - tW; x < W + tW * 2; x += tW) {
-        ctx.beginPath(); ctx.moveTo(x, L.floorY); ctx.lineTo(x, H); ctx.stroke();
-      }
-      for (let y = L.floorY; y < H; y += tH) {
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-      }
-    }
-
-    _drawPosters(off, level, anomSt, now) {
-      const { W, L } = this;
-      const sp = CFG.POSTER_SPACING;
-      const sx = Math.floor(off / sp) * sp;
-      for (let vx = sx - sp; vx < off + W + sp * 2; vx += sp) {
-        const sx2 = vx - off;
-        if (sx2 < -L.posterW - 10 || sx2 > W + 10) continue;
-        const idx = Math.floor(vx / sp);
-
-        // Determine if this poster position matches the anomaly trigger
-        const isAnom = (
-          level.hasAnomaly &&
-          level.anomaly.type === 'visual_poster' &&
-          anomSt && anomSt.active &&
-          idx === Math.floor(level.anomaly.progress * level.length / sp)
+      // Pool of dynamic point-lights (repositioned each frame)
+      for (let i = 0; i < 12; i++) {
+        const pl = new THREE.PointLight(
+          new THREE.Color(pal.light), 1.8, 12, 1.5,
         );
+        pl.position.set(0, this.CH - 0.15, 0);
+        this.scene.add(pl);
+        this._poolLights.push(pl);
+      }
 
-        const content = isAnom
-          ? ANOMALY_POSTERS[Math.abs(idx) % ANOMALY_POSTERS.length]
-          : NORMAL_POSTERS[Math.abs(idx) % NORMAL_POSTERS.length];
+      this.cam.position.set(0, this.EY, 0);
+      this.cam.rotation.set(0, 0, 0);
+    }
 
-        this._drawOnePoster(sx2, L.posterY, L.posterW, L.posterH, content, isAnom, now);
+    // ── Per-frame draw (same interface as the old 2-D version) ─
+
+    draw(scrollPos, level, anomSt, glitchAlpha, flashAlpha, now) {
+      const z = -scrollPos * this.S;
+
+      // Camera position + subtle walking bob
+      this.cam.position.z = z;
+      this.cam.position.y = this.EY + Math.sin(scrollPos * 0.08) * 0.03;
+
+      // Glitch → camera shake
+      if (glitchAlpha > 0.01) {
+        this.cam.position.x = (Math.random() - 0.5) * 0.12 * glitchAlpha;
+        this.cam.rotation.z = (Math.random() - 0.5) * 0.025 * glitchAlpha;
+      } else {
+        this.cam.position.x = 0;
+        this.cam.rotation.z = 0;
+      }
+
+      // Flash overlay
+      this._flashMat.opacity = flashAlpha * 0.5;
+
+      // Reposition dynamic lights near camera
+      this._updateLights(z, now);
+
+      // Anomaly poster swap
+      this._updateAnomalyPoster(anomSt, now);
+
+      // Stare figure
+      if (this._figureMesh) {
+        const vis = anomSt && anomSt.type === 'stare_figure'
+                    && anomSt.figureAlpha > 0;
+        this._figureMesh.visible = !!vis;
+        if (vis) this._figureMesh.material.opacity = anomSt.figureAlpha;
+      }
+
+      this._r.render(this.scene, this.cam);
+    }
+
+    // ── Corridor geometry ──────────────────────────────────────
+
+    _buildCorridor(len, pal) {
+      const W = this.CW, H = this.CH;
+
+      // Walls (tiled texture)
+      const wGeo = new THREE.PlaneGeometry(len, H);
+
+      const wTexL = this._tileTex(pal.wall, 0.14, 0.07, 0.5);
+      wTexL.repeat.set(len / 1.5, H / 1.5);
+      const wMatL = new THREE.MeshStandardMaterial({
+        map: wTexL, roughness: 0.82, metalness: 0.02,
+      });
+      const lw = new THREE.Mesh(wGeo, wMatL);
+      lw.rotation.y = Math.PI / 2;
+      lw.position.set(-W / 2, H / 2, -len / 2);
+      this._grp.add(lw);
+
+      const wTexR = this._tileTex(pal.wall, 0.14, 0.07, 0.5);
+      wTexR.repeat.set(len / 1.5, H / 1.5);
+      const wMatR = new THREE.MeshStandardMaterial({
+        map: wTexR, roughness: 0.82, metalness: 0.02,
+      });
+      const rw = new THREE.Mesh(wGeo.clone(), wMatR);
+      rw.rotation.y = -Math.PI / 2;
+      rw.position.set(W / 2, H / 2, -len / 2);
+      this._grp.add(rw);
+
+      // Floor (slightly reflective institutional tile)
+      const fTex = this._tileTex(pal.floor, 0.18, 0.09, 0.5);
+      fTex.repeat.set(W / 1.2, len / 1.2);
+      const fMat = new THREE.MeshStandardMaterial({
+        map: fTex, roughness: 0.55, metalness: 0.18,
+      });
+      const fGeo = new THREE.PlaneGeometry(W, len);
+      const fl = new THREE.Mesh(fGeo, fMat);
+      fl.rotation.x = -Math.PI / 2;
+      fl.position.set(0, 0, -len / 2);
+      this._grp.add(fl);
+
+      // Ceiling
+      const cTex = this._tileTex(pal.ceiling, 0.08, 0.04, 0.35);
+      cTex.repeat.set(W / 2.5, len / 2.5);
+      const cMat = new THREE.MeshStandardMaterial({
+        map: cTex, roughness: 0.92, metalness: 0,
+      });
+      const cl = new THREE.Mesh(fGeo.clone(), cMat);
+      cl.rotation.x = Math.PI / 2;
+      cl.position.set(0, H, -len / 2);
+      this._grp.add(cl);
+
+      // Dado rails (horizontal wall trim)
+      const dGeo = new THREE.BoxGeometry(0.06, 0.05, len);
+      const dMat = new THREE.MeshStandardMaterial({
+        color: darken(pal.wall, 0.3), roughness: 0.7,
+      });
+      const dadoY = H * 0.35;
+      const dl = new THREE.Mesh(dGeo, dMat);
+      dl.position.set(-W / 2 + 0.03, dadoY, -len / 2);
+      this._grp.add(dl);
+      const dr = new THREE.Mesh(dGeo.clone(), dMat);
+      dr.position.set(W / 2 - 0.03, dadoY, -len / 2);
+      this._grp.add(dr);
+    }
+
+    _buildFixtures(len, pal) {
+      const sp  = CFG.LIGHT_SPACING * this.S;
+      this._fixZs = [];
+      const fGeo = new THREE.BoxGeometry(1.2, 0.04, 0.3);
+      const fMat = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(pal.light),
+      });
+      for (let z = -sp; z > -len; z -= sp) {
+        const m = new THREE.Mesh(fGeo, fMat);
+        m.position.set(0, this.CH - 0.02, z);
+        this._grp.add(m);
+        this._fixZs.push(z);
       }
     }
 
-    _drawOnePoster(x, y, w, h, content, isAnom, now) {
-      const { ctx } = this;
-
-      // Background
-      ctx.fillStyle = isAnom ? '#3a0505' : content.bg;
-      ctx.fillRect(x, y, w, h);
-
-      // Border
-      if (isAnom) {
-        const pulse = 0.5 + 0.5 * Math.sin(now / 180);
-        ctx.strokeStyle = `rgba(220,40,40,${pulse})`;
-        ctx.lineWidth   = 2;
-      } else {
-        ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-        ctx.lineWidth   = 1;
+    _buildPillars(len, pal) {
+      const sp = CFG.PILLAR_SPACING * this.S;
+      const W  = this.CW;
+      const pGeo   = new THREE.BoxGeometry(0.25, this.CH, 0.25);
+      const pMat   = new THREE.MeshStandardMaterial({
+        color: pal.pillar, roughness: 0.7, metalness: 0.05,
+      });
+      const capGeo = new THREE.BoxGeometry(0.35, 0.12, 0.35);
+      const capMat = new THREE.MeshStandardMaterial({
+        color: lighten(pal.pillar, 0.08), roughness: 0.7,
+      });
+      for (let z = 0; z > -len; z -= sp) {
+        for (const side of [-1, 1]) {
+          const p = new THREE.Mesh(pGeo, pMat);
+          p.position.set(side * (W / 2 - 0.13), this.CH / 2, z);
+          this._grp.add(p);
+          const c = new THREE.Mesh(capGeo, capMat);
+          c.position.set(side * (W / 2 - 0.13), this.CH - 0.06, z);
+          this._grp.add(c);
+        }
       }
-      ctx.strokeRect(x, y, w, h);
+    }
 
-      // Text
-      ctx.fillStyle    = isAnom ? '#ff6060' : 'rgba(255,255,255,0.88)';
-      const fSize      = Math.max(7, Math.floor(w / 5.5));
-      ctx.font         = `bold ${fSize}px 'Courier New', monospace`;
-      ctx.textAlign    = 'center';
-      ctx.textBaseline = 'middle';
-      const lineH = h / (content.lines.length + 1);
-      content.lines.forEach((line, i) => {
-        ctx.fillText(line, x + w / 2, y + lineH * (i + 1));
+    _buildPosters(len, level) {
+      const sp = CFG.POSTER_SPACING * this.S;
+      const W  = this.CW;
+      const pw = 0.8, ph = 1.1;
+      const pGeo = new THREE.PlaneGeometry(pw, ph);
+
+      const anomIdx =
+        level.hasAnomaly && level.anomaly.type === 'visual_poster'
+          ? Math.floor(level.anomaly.progress * level.length / CFG.POSTER_SPACING)
+          : -1;
+
+      let idx = 0;
+      for (let z = -sp; z > -len; z -= sp) {
+        const side    = idx % 2 === 0 ? -1 : 1;
+        const content = NORMAL_POSTERS[Math.abs(idx) % NORMAL_POSTERS.length];
+        const tex     = this._posterTex(content, false);
+        const mat     = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 });
+
+        const m = new THREE.Mesh(pGeo.clone(), mat);
+        m.position.set(side * (W / 2 - 0.005), 1.9, z);
+        m.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;
+        this._grp.add(m);
+
+        if (idx === anomIdx) {
+          this._anomPoster  = m;
+          this._anomMatNorm = mat;
+          const ac = ANOMALY_POSTERS[Math.abs(idx) % ANOMALY_POSTERS.length];
+          this._anomMatAnom = new THREE.MeshStandardMaterial({
+            map: this._posterTex(ac, true), roughness: 0.6,
+            emissive: 0x330000, emissiveIntensity: 0.3,
+          });
+        }
+        idx++;
+      }
+    }
+
+    _buildDoors(len, pal) {
+      const sp = 15;      // ≈ 1 500 virtual units
+      const W  = this.CW;
+      const dw = 0.9, dh = 2.4, dd = 0.12;
+      const frameMat  = new THREE.MeshStandardMaterial({
+        color: darken(pal.wall, 0.45), roughness: 0.8,
+      });
+      const doorMat   = new THREE.MeshStandardMaterial({
+        color: darken(pal.wall, 0.25), roughness: 0.7,
+      });
+      const handleMat = new THREE.MeshStandardMaterial({
+        color: lighten(pal.wall, 0.25), roughness: 0.3, metalness: 0.6,
+      });
+      const frameGeo  = new THREE.BoxGeometry(dd, dh + 0.05, dw + 0.1);
+      const doorGeo   = new THREE.BoxGeometry(dd * 0.5, dh, dw);
+      const handleGeo = new THREE.BoxGeometry(0.06, 0.1, 0.04);
+
+      let i = 0;
+      for (let z = -sp; z > -len; z -= sp) {
+        const side = i % 2 === 0 ? 1 : -1;
+        const frame  = new THREE.Mesh(frameGeo, frameMat);
+        frame.position.set(side * (W / 2 - dd / 2), dh / 2, z);
+        this._grp.add(frame);
+        const door   = new THREE.Mesh(doorGeo, doorMat);
+        door.position.set(side * (W / 2 - dd / 2), dh / 2, z);
+        this._grp.add(door);
+        const handle = new THREE.Mesh(handleGeo, handleMat);
+        handle.position.set(
+          side * (W / 2 - dd - 0.02), dh * 0.45, z + 0.28,
+        );
+        this._grp.add(handle);
+        i++;
+      }
+    }
+
+    _buildExitSigns(len) {
+      const sp   = CFG.POSTER_SPACING * this.S * 2;
+      const sGeo = new THREE.BoxGeometry(0.35, 0.14, 0.04);
+      const sMat = new THREE.MeshBasicMaterial({ color: 0x40cc70 });
+      for (let z = -sp * 1.5; z > -len; z -= sp) {
+        const s = new THREE.Mesh(sGeo, sMat);
+        s.position.set(0, this.CH - 0.2, z);
+        this._grp.add(s);
+      }
+    }
+
+    _buildHazardStripes(len) {
+      const sp   = CFG.PILLAR_SPACING * this.S;
+      const W    = this.CW;
+      const sGeo = new THREE.PlaneGeometry(0.6, 0.04);
+      const sMat = new THREE.MeshBasicMaterial({
+        color: 0xb48c14, transparent: true, opacity: 0.5,
+      });
+      for (let z = 0; z > -len; z -= sp) {
+        for (const sx of [-1, 1]) {
+          const s = new THREE.Mesh(sGeo, sMat);
+          s.rotation.x = -Math.PI / 2;
+          s.position.set(sx * (W / 2 - 0.3), 0.005, z);
+          this._grp.add(s);
+        }
+      }
+    }
+
+    _buildFigure(level) {
+      this._figureMesh = null;
+      if (!level.hasAnomaly || level.anomaly.type !== 'stare_figure') return;
+      const bGeo = new THREE.BoxGeometry(0.3, 1.8, 0.15);
+      const bMat = new THREE.MeshBasicMaterial({
+        color: 0x000000, transparent: true, opacity: 0,
+      });
+      const fig    = new THREE.Mesh(bGeo, bMat);
+      const trigZ  = -level.anomaly.progress * level.length * this.S;
+      fig.position.set(0, 0.9, trigZ - 6);
+      fig.visible      = false;
+      this._figureMesh = fig;
+      this._grp.add(fig);
+    }
+
+    // ── Per-frame helpers ──────────────────────────────────────
+
+    _updateLights(camZ, now) {
+      const sorted = this._fixZs
+        .map(fz => ({ z: fz, d: Math.abs(fz - camZ) }))
+        .sort((a, b) => a.d - b.d)
+        .slice(0, this._poolLights.length);
+      this._poolLights.forEach((pl, i) => {
+        if (i < sorted.length) {
+          pl.visible   = true;
+          pl.position.z = sorted[i].z;
+          // Subtle flicker
+          pl.intensity = 1.8 * (0.85 + 0.15 * Math.sin(now * 0.003 + i * 7.3));
+        } else {
+          pl.visible = false;
+        }
       });
     }
 
-    _drawDoors(off, pal) {
-      const { ctx, W, L } = this;
-      const sp  = 1500;
-      const dW  = Math.max(30, Math.floor(W * 0.032));
-      const dH  = Math.floor(L.wallH * 0.70);
-      const dY  = L.wallBot - dH;
-      const sx  = Math.floor(off / sp) * sp;
-
-      for (let vx = sx - sp; vx < off + W + sp * 2; vx += sp) {
-        const sx2 = vx - off;
-        if (sx2 < -dW - 10 || sx2 > W + 10) continue;
-        // Recessed frame
-        ctx.fillStyle = darken(pal.wall, 0.45);
-        ctx.fillRect(sx2 - 3, dY - 3, dW + 6, dH + 6);
-        // Door surface
-        ctx.fillStyle = darken(pal.wall, 0.25);
-        ctx.fillRect(sx2, dY, dW, dH);
-        // Door handle
-        ctx.fillStyle = lighten(pal.wall, 0.25);
-        ctx.fillRect(sx2 + dW * 0.72, dY + dH * 0.45, dW * 0.10, dH * 0.08);
+    _updateAnomalyPoster(anomSt, now) {
+      if (!this._anomPoster) return;
+      const active = !!(
+        anomSt && anomSt.type === 'visual_poster' && anomSt.active
+      );
+      if (active !== this._anomActive) {
+        this._anomPoster.material =
+          active ? this._anomMatAnom : this._anomMatNorm;
+        this._anomActive = active;
+      }
+      // Pulsing emissive when anomaly is active
+      if (active && this._anomMatAnom) {
+        this._anomMatAnom.emissiveIntensity =
+          0.3 + 0.2 * Math.sin(now * 0.005);
       }
     }
 
-    _drawExitSigns(off) {
-      const { ctx, W, L } = this;
-      const sp  = 900;
-      const sW  = Math.max(32, Math.floor(W * 0.03));
-      const sH  = Math.floor(sW * 0.4);
-      const sY  = L.wallY + 10;
-      const sx  = Math.floor(off / sp) * sp;
+    // ── Procedural texture generators ──────────────────────────
 
-      for (let vx = sx - sp; vx < off + W + sp * 2; vx += sp) {
-        const sx2 = vx - off;
-        if (sx2 < -sW - 10 || sx2 > W + 10) continue;
-        ctx.fillStyle   = '#1a4a28';
-        ctx.fillRect(sx2, sY, sW, sH);
-        ctx.fillStyle   = '#40cc70';
-        ctx.font        = `bold ${Math.max(6, Math.floor(sH * 0.55))}px 'Courier New', monospace`;
-        ctx.textAlign   = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('EXIT', sx2 + sW / 2, sY + sH / 2);
-      }
-    }
+    _tileTex(baseHex, lightA, lightB, groutDark) {
+      const c = document.createElement('canvas');
+      const s = 128;
+      c.width = s; c.height = s;
+      const x = c.getContext('2d');
 
-    _drawWrongShadow(off, phase, now) {
-      const { ctx, W, H, L } = this;
-      // Normal shadow: would follow the direction of light (moves with mid parallax)
-      // Anomaly shadow: moves in the OPPOSITE direction
-      const lightX    = 300;  // virtual light source x
-      const shadowLen = 200;
-      // Phase oscillates to make the shadow gradually move wrong
-      const wrongDir  = -1;   // reverse of expected
-      const shadowX   = (W / 2) + wrongDir * (phase * shadowLen);
-
-      ctx.save();
-      ctx.globalAlpha = 0.35 + 0.2 * Math.sin(now / 400);
-      const gr = ctx.createLinearGradient(shadowX, L.wallY + L.wallH * 0.2, shadowX + 40, L.wallBot);
-      gr.addColorStop(0, 'rgba(0,0,0,0.6)');
-      gr.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = gr;
-      // Human-shaped shadow profile
-      ctx.beginPath();
-      ctx.moveTo(shadowX,      L.wallBot);
-      ctx.lineTo(shadowX + 15, L.wallY + L.wallH * 0.22);
-      ctx.lineTo(shadowX + 30, L.wallY + L.wallH * 0.20);
-      ctx.lineTo(shadowX + 40, L.wallBot);
-      ctx.closePath();
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      ctx.restore();
-    }
-
-    // ── Foreground layer ───────────────────────────────────────
-
-    _drawFg(off, level) {
-      const pal = level.pal;
-      this._drawPillars(off, pal);
-      this._drawFloorStripes(off);
-      this._drawOverheadCables(off, pal);
-      this._drawVignette();
-    }
-
-    _drawPillars(off, pal) {
-      const { ctx, W, H, L } = this;
-      const sp  = CFG.PILLAR_SPACING;
-      const pW  = Math.max(18, Math.floor(W * 0.018));
-      const sx  = Math.floor(off / sp) * sp;
-
-      for (let vx = sx - sp; vx < off + W + sp * 2; vx += sp) {
-        const sx2 = vx - off;
-        if (sx2 < -pW - 5 || sx2 > W + 5) continue;
-        // Main column
-        ctx.fillStyle = pal.pillar;
-        ctx.fillRect(sx2, L.wallY, pW, H - L.wallY);
-        // Slight highlight on left edge
-        ctx.fillStyle = lighten(pal.pillar, 0.18);
-        ctx.fillRect(sx2, L.wallY, 2, H - L.wallY);
-        // Cap at ceiling
-        ctx.fillStyle = lighten(pal.pillar, 0.08);
-        ctx.fillRect(sx2 - 3, L.ceilH, pW + 6, 12);
-      }
-    }
-
-    _drawFloorStripes(off) {
-      const { ctx, W, H, L } = this;
-      const sp   = CFG.PILLAR_SPACING;
-      const strW = 60;
-      const sx   = Math.floor(off / sp) * sp;
-
-      ctx.fillStyle = 'rgba(180,140,20,0.22)';
-      for (let vx = sx - sp; vx < off + W + sp * 2; vx += sp) {
-        const sx2 = vx - off;
-        // Hazard stripe at each pillar base
-        for (let s = 0; s < 4; s++) {
-          if (s % 2 === 0) {
-            ctx.fillRect(sx2 + s * 10, L.floorY, 10, H - L.floorY);
-          }
+      x.fillStyle = darken(baseHex, groutDark);
+      x.fillRect(0, 0, s, s);
+      const colA = lighten(baseHex, lightA);
+      const colB = lighten(baseHex, lightB);
+      const tw = s / 4, th = s / 4;
+      for (let r = 0; r < 4; r++) {
+        for (let col = 0; col < 4; col++) {
+          x.fillStyle = (r + col) % 2 === 0 ? colA : colB;
+          x.fillRect(col * tw + 1, r * th + 1, tw - 2, th - 2);
         }
       }
+      const tex  = new THREE.CanvasTexture(c);
+      tex.wrapS  = THREE.RepeatWrapping;
+      tex.wrapT  = THREE.RepeatWrapping;
+      tex.encoding = THREE.sRGBEncoding;
+      return tex;
     }
 
-    _drawOverheadCables(off, pal) {
-      const { ctx, W, L } = this;
-      const sp  = CFG.PILLAR_SPACING;
-      const sx  = Math.floor(off / sp) * sp;
-      ctx.strokeStyle = darken(pal.pillar, 0.2);
-      ctx.lineWidth   = 1.5;
-      // Catenary-ish cable between pillars
-      for (let vx = sx - sp; vx < off + W + sp * 2; vx += sp) {
-        const x1 = vx - off;
-        const x2 = x1 + sp;
-        const cy = L.ceilH + 8 + Math.floor(W * 0.01);
-        ctx.beginPath();
-        ctx.moveTo(x1, cy);
-        ctx.quadraticCurveTo((x1 + x2) / 2, cy + 12, x2, cy);
-        ctx.stroke();
+    _posterTex(content, isAnom) {
+      const c = document.createElement('canvas');
+      c.width = 128; c.height = 180;
+      const x = c.getContext('2d');
+
+      x.fillStyle = isAnom ? '#3a0505' : content.bg;
+      x.fillRect(0, 0, 128, 180);
+      if (isAnom) {
+        x.strokeStyle = '#dc2828';
+        x.lineWidth = 3;
+        x.strokeRect(2, 2, 124, 176);
       }
-    }
-
-    _drawVignette() {
-      const { ctx, W, H } = this;
-      const gr = ctx.createRadialGradient(W / 2, H / 2, H * 0.2, W / 2, H / 2, H * 0.75);
-      gr.addColorStop(0, 'rgba(0,0,0,0)');
-      gr.addColorStop(1, 'rgba(0,0,0,0.55)');
-      ctx.fillStyle = gr;
-      ctx.fillRect(0, 0, W, H);
-    }
-
-    // ── Effect overlays ────────────────────────────────────────
-
-    _drawEffects(scrollPos, anomSt, glitchAlpha, flashAlpha, now) {
-      const { ctx, W, H } = this;
-
-      // White flash
-      if (flashAlpha > 0) {
-        ctx.fillStyle = `rgba(255,255,255,${flashAlpha * 0.35})`;
-        ctx.fillRect(0, 0, W, H);
-      }
-
-      // Glitch strips
-      if (glitchAlpha > 0) {
-        ctx.save();
-        ctx.globalAlpha = glitchAlpha * 0.6;
-        const stripCount = 5 + Math.floor(Math.random() * 6);
-        for (let i = 0; i < stripCount; i++) {
-          const sy    = Math.random() * H;
-          const sh    = 2 + Math.random() * 12;
-          const shift = (Math.random() - 0.5) * 30;
-          ctx.drawImage(this.canvas, 0, sy, W, sh, shift, sy, W, sh);
-        }
-        // Colour aberration tint
-        ctx.fillStyle = `rgba(0,220,255,${glitchAlpha * 0.08})`;
-        ctx.fillRect(0, 0, W, H);
-        ctx.restore();
-      }
-
-      // Temporal anomaly distortion lines
-      if (anomSt && anomSt.type === 'temporal_slow' && anomSt.active) {
-        ctx.save();
-        ctx.globalAlpha = 0.25 + 0.12 * Math.sin(now / 60);
-        ctx.strokeStyle = 'rgba(100,100,255,0.4)';
-        ctx.lineWidth   = 1;
-        const lineY = (now / 8) % H;
-        ctx.beginPath();
-        ctx.moveTo(0, lineY);
-        ctx.lineTo(W, lineY);
-        ctx.stroke();
-        ctx.globalAlpha = 1;
-        ctx.restore();
-      }
+      x.fillStyle    = isAnom ? '#ff6060' : 'rgba(255,255,255,0.88)';
+      x.font         = "bold 18px 'Courier New', monospace";
+      x.textAlign    = 'center';
+      x.textBaseline = 'middle';
+      const lh = 180 / (content.lines.length + 1);
+      content.lines.forEach((line, i) => {
+        x.fillText(line, 64, lh * (i + 1));
+      });
+      const tex = new THREE.CanvasTexture(c);
+      tex.encoding = THREE.sRGBEncoding;
+      return tex;
     }
   }
 
@@ -897,8 +837,8 @@
 
       // Keyboard
       window.addEventListener('keydown', (e) => {
-        if (e.key === 'ArrowRight' || e.key === 'd') this._onScroll( 18 * CFG.SCROLL_FACTOR);
-        if (e.key === 'ArrowLeft'  || e.key === 'a') this._onScroll(-18 * CFG.SCROLL_FACTOR);
+        if (e.key === 'ArrowRight' || e.key === 'd') this._onScroll( 12 * CFG.SCROLL_FACTOR);
+        if (e.key === 'ArrowLeft'  || e.key === 'a') this._onScroll(-12 * CFG.SCROLL_FACTOR);
         if (e.key === 'r' || e.key === 'R')          this._onReverse();
       });
     }
@@ -1088,6 +1028,7 @@
       // Systems
       this.audio    = new AudioSystem();
       this.renderer = new Renderer(this.$canvas);
+      this.renderer.initLevel(LEVELS[0]);
       this.anomaly  = new AnomalySystem();
       this.stare    = new StareDetector(() => this._onStareComplete());
       this.input    = new InputController(
@@ -1142,6 +1083,7 @@
       this.stareElapsed = 0;
       this.stare.reset();
       this.anomaly.initLevel(level);
+      this.renderer.initLevel(level);
 
       this.$secNum.textContent = String(this.levelIdx).padStart(2, '0');
       this._showBanner(level.hint);
