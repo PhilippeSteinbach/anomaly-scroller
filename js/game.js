@@ -1114,15 +1114,91 @@
   }
 
   // ════════════════════════════════════════════════════════════
+  //  LEADERBOARD  (localStorage-backed)
+  // ════════════════════════════════════════════════════════════
+  const LB_KEY = 'anomaly_scroller_leaderboard';
+  const LB_MAX = 20;
+
+  class Leaderboard {
+    constructor() {
+      this._entries = this._load();
+    }
+
+    _load() {
+      try {
+        const raw = localStorage.getItem(LB_KEY);
+        return raw ? JSON.parse(raw) : [];
+      } catch { return []; }
+    }
+
+    _save() {
+      try { localStorage.setItem(LB_KEY, JSON.stringify(this._entries)); }
+      catch { /* quota exceeded — silently ignore */ }
+    }
+
+    /** Add a new entry. Returns the rank (1-based) or -1 if not added. */
+    add(name, timeMs) {
+      const entry = {
+        name: (name || 'ANONYMOUS').toUpperCase().slice(0, 16),
+        time: timeMs,
+        date: new Date().toISOString().slice(0, 10),
+      };
+      this._entries.push(entry);
+      this._entries.sort((a, b) => a.time - b.time);
+      if (this._entries.length > LB_MAX) this._entries.length = LB_MAX;
+      this._save();
+      return this._entries.indexOf(entry) + 1;
+    }
+
+    getAll() { return this._entries; }
+
+    clear() {
+      this._entries = [];
+      this._save();
+    }
+
+    /** Render into the leaderboard table body */
+    render(tbodyEl, emptyEl, highlightIdx) {
+      tbodyEl.innerHTML = '';
+      if (this._entries.length === 0) {
+        emptyEl.classList.remove('hidden');
+        return;
+      }
+      emptyEl.classList.add('hidden');
+      this._entries.forEach((e, i) => {
+        const tr = document.createElement('tr');
+        if (i === highlightIdx) tr.classList.add('highlight');
+        tr.innerHTML = `<td>${i + 1}</td><td>${this._esc(e.name)}</td>`
+          + `<td>${this._fmtTime(e.time)}</td><td>${e.date}</td>`;
+        tbodyEl.appendChild(tr);
+      });
+    }
+
+    _fmtTime(ms) {
+      const s = Math.floor(ms / 1000);
+      const m = Math.floor(s / 60);
+      const sec = s % 60;
+      return `${m}:${String(sec).padStart(2, '0')}`;
+    }
+
+    _esc(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════
   //  GAME  (main state machine)
   // ════════════════════════════════════════════════════════════
   const STATE = {
-    MENU:      'menu',
-    PLAYING:   'playing',
-    RETURNING: 'returning',   // reversed correctly; now return to start
-    CLEAR:     'clear',
-    GAMEOVER:  'gameover',
-    VICTORY:   'victory',
+    MENU:         'menu',
+    PLAYING:      'playing',
+    RETURNING:    'returning',
+    CLEAR:        'clear',
+    GAMEOVER:     'gameover',
+    VICTORY:      'victory',
+    LEADERBOARD:  'leaderboard',
   };
 
   class Game {
@@ -1138,10 +1214,11 @@
       this.$scrollHint  = document.getElementById('scroll-hint');
 
       this.$screens = {
-        [STATE.MENU]:     document.getElementById('screen-menu'),
-        [STATE.GAMEOVER]: document.getElementById('screen-gameover'),
-        [STATE.CLEAR]:    document.getElementById('screen-clear'),
-        [STATE.VICTORY]:  document.getElementById('screen-victory'),
+        [STATE.MENU]:        document.getElementById('screen-menu'),
+        [STATE.GAMEOVER]:    document.getElementById('screen-gameover'),
+        [STATE.CLEAR]:       document.getElementById('screen-clear'),
+        [STATE.VICTORY]:     document.getElementById('screen-victory'),
+        [STATE.LEADERBOARD]: document.getElementById('screen-leaderboard'),
       };
 
       // Systems
@@ -1154,6 +1231,7 @@
         (d) => this._handleScroll(d),
         ()  => this._handleReverse()
       );
+      this.leaderboard = new Leaderboard();
 
       // State
       this.state       = STATE.MENU;
@@ -1166,6 +1244,10 @@
       // Effect state
       this.glitchAlpha = 0;
       this.flashAlpha  = 0;
+
+      // Timer for leaderboard
+      this._runStartT    = 0;
+      this._lastLBRank   = -1; // highlight index after victory
 
       // Step sound throttle
       this._lastStepT  = 0;
@@ -1183,13 +1265,27 @@
       document.getElementById('btn-next')   .addEventListener('click', () => this._advanceLevel());
       document.getElementById('btn-restart').addEventListener('click', () => this._startGame());
       document.getElementById('btn-reverse').addEventListener('click', () => this._handleReverse());
+
+      // Leaderboard
+      document.getElementById('btn-leaderboard') .addEventListener('click', () => this._showLeaderboard());
+      document.getElementById('btn-lb-victory')  .addEventListener('click', () => this._showLeaderboard());
+      document.getElementById('btn-lb-back')     .addEventListener('click', () => this._setState(this._lbReturnState || STATE.MENU));
+      document.getElementById('btn-lb-clear')    .addEventListener('click', () => {
+        this.leaderboard.clear();
+        this._renderLeaderboard();
+      });
+
+      // Prevent scroll input from propagating when typing in name field
+      document.getElementById('player-name').addEventListener('keydown', (e) => e.stopPropagation());
     }
 
     // ── Game flow ──────────────────────────────────────────────
 
     _startGame() {
-      this.levelIdx  = 0;
-      this.scrollPos = 0;
+      this.levelIdx    = 0;
+      this.scrollPos   = 0;
+      this._runStartT  = performance.now();
+      this._playerName = (document.getElementById('player-name').value || '').trim();
       this._beginLevel();
     }
 
@@ -1217,6 +1313,14 @@
     _advanceLevel() {
       this.levelIdx++;
       if (this.levelIdx >= LEVELS.length) {
+        const elapsed = performance.now() - this._runStartT;
+        // Show time on victory screen
+        const lb = this.leaderboard;
+        document.getElementById('vic-time').textContent =
+          `Completion time: ${lb._fmtTime(elapsed)}`;
+        // Save to leaderboard
+        const rank = lb.add(this._playerName, elapsed);
+        this._lastLBRank = rank - 1; // 0-based for highlight
         this._setState(STATE.VICTORY);
         this.audio.playSuccess();
         return;
@@ -1359,14 +1463,25 @@
       const el = this.$msgBanner;
       el.textContent = text;
       el.classList.remove('hidden');
-      // Restart CSS animation
       el.style.animation = 'none';
-      // Force reflow
       void el.offsetWidth;
       el.style.animation = '';
       el.classList.remove('hidden');
-      // Hide after animation completes
       setTimeout(() => el.classList.add('hidden'), 4200);
+    }
+
+    _showLeaderboard() {
+      this._lbReturnState = this.state;
+      this._renderLeaderboard();
+      this._setState(STATE.LEADERBOARD);
+    }
+
+    _renderLeaderboard() {
+      this.leaderboard.render(
+        document.getElementById('lb-body'),
+        document.getElementById('lb-empty'),
+        this._lastLBRank >= 0 ? this._lastLBRank : -1,
+      );
     }
 
     // ── Main loop ──────────────────────────────────────────────

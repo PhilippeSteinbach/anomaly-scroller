@@ -390,6 +390,108 @@ html, body {
   transform: scale(0.975);
 }
 
+/* ── Secondary button ──────────────────────────────────────── */
+.btn-secondary {
+  display: inline-block;
+  margin-top: 0.8rem;
+  padding: 0.45rem 1.4rem;
+  background: transparent;
+  border: 1px solid var(--dim);
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s, color 0.18s;
+}
+
+.btn-secondary:hover {
+  background: rgba(255,255,255,0.04);
+  border-color: var(--text);
+  color: var(--text);
+}
+
+.btn-danger-text { color: var(--danger); border-color: rgba(160,32,32,0.4); }
+.btn-danger-text:hover { color: #cc3030; border-color: var(--danger); }
+
+/* ── Name input ────────────────────────────────────────────── */
+.name-input-wrap {
+  margin: 0 auto 0.6rem;
+  max-width: 280px;
+  text-align: center;
+}
+
+.name-input-wrap label {
+  display: block;
+  font-size: 0.6rem;
+  letter-spacing: 0.25em;
+  color: var(--dim);
+  margin-bottom: 0.35rem;
+}
+
+.name-input-wrap input {
+  width: 100%;
+  padding: 0.45rem 0.7rem;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--dim);
+  color: var(--bright);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-align: center;
+  text-transform: uppercase;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.name-input-wrap input::placeholder {
+  color: var(--dim);
+  opacity: 0.6;
+}
+
+.name-input-wrap input:focus {
+  border-color: var(--accent);
+}
+
+/* ── Leaderboard table ─────────────────────────────────────── */
+#lb-table-wrap {
+  margin: 1.2rem auto;
+  max-width: 440px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+#lb-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.72rem;
+}
+
+#lb-table thead th {
+  color: var(--accent);
+  font-weight: 400;
+  letter-spacing: 0.15em;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--dim);
+  text-align: left;
+}
+
+#lb-table thead th:first-child { text-align: center; width: 2.5rem; }
+
+#lb-table tbody td {
+  padding: 0.35rem 0.6rem;
+  color: var(--text);
+  border-bottom: 1px solid rgba(80,80,90,0.25);
+}
+
+#lb-table tbody td:first-child { text-align: center; color: var(--dim); }
+
+#lb-table tbody tr.highlight td {
+  color: var(--bright);
+  background: rgba(104,104,160,0.1);
+}
+
 /* ── Utility ────────────────────────────────────────────────── */
 .hidden {
   display: none !important;

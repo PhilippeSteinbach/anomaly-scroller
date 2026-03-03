@@ -47,7 +47,12 @@
           <li>On a normal section, scroll all the way to the <em>end</em></li>
           <li class="tip">Tip&nbsp;&mdash; stopping for 3&nbsp;s may reveal hidden details</li>
         </ul>
+        <div class="name-input-wrap">
+          <label for="player-name">YOUR NAME</label>
+          <input type="text" id="player-name" maxlength="16" placeholder="ANONYMOUS" autocomplete="off" spellcheck="false" />
+        </div>
         <button id="btn-start" class="btn-primary">BEGIN LOOP</button>
+        <button id="btn-leaderboard" class="btn-secondary">LEADERBOARD</button>
       </div>
     </div>
 
@@ -75,7 +80,27 @@
       <div class="screen-inner">
         <h2 id="vic-title">THE LOOP IS BROKEN</h2>
         <p>You navigated all 7 sections.<br />You have escaped.</p>
+        <p id="vic-time" class="sub"></p>
         <button id="btn-restart" class="btn-primary">PLAY AGAIN</button>
+        <button id="btn-lb-victory" class="btn-secondary">LEADERBOARD</button>
+      </div>
+    </div>
+
+    <!-- ── SCREEN: Leaderboard ─────────────────────────── -->
+    <div id="screen-leaderboard" class="screen" role="dialog" aria-labelledby="lb-title">
+      <div class="screen-inner">
+        <h2 id="lb-title">LEADERBOARD</h2>
+        <div id="lb-table-wrap">
+          <table id="lb-table">
+            <thead>
+              <tr><th>#</th><th>NAME</th><th>TIME</th><th>DATE</th></tr>
+            </thead>
+            <tbody id="lb-body"></tbody>
+          </table>
+          <p id="lb-empty" class="sub hidden">No entries yet.</p>
+        </div>
+        <button id="btn-lb-back" class="btn-primary">BACK</button>
+        <button id="btn-lb-clear" class="btn-secondary btn-danger-text">CLEAR ALL</button>
       </div>
     </div>
 
