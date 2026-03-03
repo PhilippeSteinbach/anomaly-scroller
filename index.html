@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="description" content="The Anomaly Scroller — find what changed before the loop resets." />
+  <title>THE ANOMALY SCROLLER</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="game">
+
+    <!-- Single game canvas — all parallax layers drawn here each frame -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- HUD (visible only while playing) -->
+    <div id="hud" class="hidden">
+      <div id="section-label">SECTION <span id="section-num">00</span></div>
+      <div id="progress-wrap">
+        <div id="progress-fill"></div>
+        <div id="progress-dot"></div>
+      </div>
+      <button id="btn-reverse" title="Reverse scroll direction">&#x21A9; REVERSE</button>
+    </div>
+
+    <!-- Stare-charge ring (shown while player is stationary) -->
+    <div id="stare-ring" class="hidden" aria-hidden="true"></div>
+
+    <!-- Transient message banner -->
+    <div id="msg-banner" class="hidden" aria-live="polite"></div>
+
+    <!-- Initial scroll hint -->
+    <div id="scroll-hint">scroll or swipe to advance &nbsp;&#x2192;</div>
+
+    <!-- ── SCREEN: Main menu ──────────────────────────────── -->
+    <div id="screen-menu" class="screen active" role="main">
+      <div class="screen-inner">
+        <div class="title-block">
+          <h1 id="game-title" data-text="THE ANOMALY SCROLLER">THE ANOMALY SCROLLER</h1>
+          <p class="tagline">something is wrong</p>
+        </div>
+        <ul class="how-to-play">
+          <li><kbd>Scroll</kbd> or <kbd>Swipe</kbd> to move through each section</li>
+          <li>Spot the <em>anomaly</em> and press <kbd>&#x21A9; Reverse</kbd></li>
+          <li>Return to the <em>start</em> to clear the section and advance</li>
+          <li>On a normal section, scroll all the way to the <em>end</em></li>
+          <li class="tip">Tip&nbsp;&mdash; stopping for 3&nbsp;s may reveal hidden details</li>
+        </ul>
+        <button id="btn-start" class="btn-primary">BEGIN LOOP</button>
+      </div>
+    </div>
+
+    <!-- ── SCREEN: Game Over ──────────────────────────────── -->
+    <div id="screen-gameover" class="screen" role="alertdialog" aria-labelledby="go-title">
+      <div class="screen-inner">
+        <h2 id="go-title" class="col-danger">THE LOOP CONTINUES</h2>
+        <p id="go-msg"></p>
+        <p class="sub">Returning to SECTION 00</p>
+        <button id="btn-retry" class="btn-primary">TRY AGAIN</button>
+      </div>
+    </div>
+
+    <!-- ── SCREEN: Section Clear ─────────────────────────── -->
+    <div id="screen-clear" class="screen" role="dialog" aria-labelledby="clr-title">
+      <div class="screen-inner">
+        <h2 id="clr-title" class="col-success">ANOMALY CLEARED</h2>
+        <p id="clr-msg"></p>
+        <button id="btn-next" class="btn-primary">ADVANCE</button>
+      </div>
+    </div>
+
+    <!-- ── SCREEN: Victory ───────────────────────────────── -->
+    <div id="screen-victory" class="screen" role="dialog" aria-labelledby="vic-title">
+      <div class="screen-inner">
+        <h2 id="vic-title">THE LOOP IS BROKEN</h2>
+        <p>You navigated every section.<br />You have escaped.</p>
+        <button id="btn-restart" class="btn-primary">PLAY AGAIN</button>
+      </div>
+    </div>
+
+  </div><!-- #game -->
+
+  <script src="js/game.js"></script>
+</body>
+</html>
