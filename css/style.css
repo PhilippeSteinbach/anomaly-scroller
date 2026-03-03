@@ -1,0 +1,404 @@
+/* ══════════════════════════════════════════════════════════════
+   THE ANOMALY SCROLLER — styles
+   Liminal-space aesthetic: desaturated, institutional, unsettling
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Reset ──────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── CSS custom properties ──────────────────────────────────── */
+:root {
+  --bg:        #050508;
+  --text:      #b8b8c0;
+  --dim:       #50505a;
+  --accent:    #6868a0;
+  --bright:    #dcdce8;
+  --danger:    #a02020;
+  --success:   #208060;
+  --mono: 'Courier New', Courier, monospace;
+}
+
+/* ── Base ────────────────────────────────────────────────────── */
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ── Game container ─────────────────────────────────────────── */
+#game {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  cursor: crosshair;
+}
+
+/* Subtle scanline overlay for the CRT feel */
+#game::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 3px,
+    rgba(0, 0, 0, 0.04) 3px,
+    rgba(0, 0, 0, 0.04) 4px
+  );
+  pointer-events: none;
+  z-index: 6;
+}
+
+/* ── Canvas ──────────────────────────────────────────────────── */
+#gameCanvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ── HUD ─────────────────────────────────────────────────────── */
+#hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 1.4rem;
+  background: linear-gradient(to bottom, rgba(5,5,8,0.85) 0%, transparent 100%);
+  z-index: 10;
+  pointer-events: none;
+}
+
+#section-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  color: var(--dim);
+  min-width: 110px;
+  flex-shrink: 0;
+}
+
+#progress-wrap {
+  flex: 1;
+  height: 2px;
+  background: rgba(255,255,255,0.07);
+  position: relative;
+}
+
+#progress-fill {
+  height: 100%;
+  background: var(--accent);
+  width: 0%;
+  transition: width 0.1s linear;
+}
+
+#progress-dot {
+  position: absolute;
+  top: -3px;
+  left: 0%;
+  width: 8px;
+  height: 8px;
+  background: var(--text);
+  border-radius: 50%;
+  transform: translateX(-50%);
+  transition: left 0.1s linear;
+}
+
+#btn-reverse {
+  pointer-events: all;
+  padding: 0.35rem 0.9rem;
+  background: transparent;
+  border: 1px solid var(--dim);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+#btn-reverse:hover {
+  border-color: var(--text);
+  background: rgba(255,255,255,0.06);
+  color: var(--bright);
+}
+
+#btn-reverse:active {
+  background: rgba(255,255,255,0.12);
+}
+
+/* ── Stare ring ──────────────────────────────────────────────── */
+#stare-ring {
+  position: absolute;
+  bottom: 2.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  pointer-events: none;
+  z-index: 10;
+}
+
+#stare-ring.charging {
+  border-color: rgba(140, 80, 200, 0.7);
+  animation: stare-charge 3s linear forwards;
+  box-shadow: 0 0 14px rgba(140, 80, 200, 0.25);
+}
+
+@keyframes stare-charge {
+  0%   { transform: translateX(-50%) scale(0.9);  opacity: 0.3; }
+  60%  { transform: translateX(-50%) scale(1.15); opacity: 0.75; }
+  100% { transform: translateX(-50%) scale(1.4);  opacity: 1; }
+}
+
+/* ── Message banner ─────────────────────────────────────────── */
+#msg-banner {
+  position: absolute;
+  bottom: 5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(5,5,8,0.88);
+  border: 1px solid var(--accent);
+  padding: 0.55rem 1.3rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  pointer-events: none;
+  z-index: 10;
+  max-width: 90vw;
+  text-align: center;
+  white-space: nowrap;
+  animation: banner-fade 4s ease-in-out forwards;
+}
+
+@keyframes banner-fade {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  12%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+  75%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ── Scroll hint ─────────────────────────────────────────────── */
+#scroll-hint {
+  position: absolute;
+  bottom: 1.4rem;
+  right: 1.4rem;
+  font-size: 0.65rem;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+  pointer-events: none;
+  z-index: 10;
+  transition: opacity 1s ease;
+}
+
+#scroll-hint.gone {
+  opacity: 0;
+}
+
+/* ── Screens (menu / game-over / clear / victory) ─────────────── */
+.screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 5, 8, 0.96);
+  z-index: 20;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.55s ease;
+}
+
+.screen.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.screen-inner {
+  max-width: 560px;
+  width: 90%;
+  text-align: center;
+  padding: 2rem 1.5rem;
+}
+
+/* ── Title block (menu) ─────────────────────────────────────── */
+.title-block {
+  margin-bottom: 2rem;
+}
+
+#game-title {
+  position: relative;
+  display: inline-block;
+  font-size: clamp(1.3rem, 4.5vw, 2.6rem);
+  font-weight: 400;
+  letter-spacing: 0.22em;
+  color: var(--bright);
+  text-shadow: 0 0 28px rgba(180, 180, 220, 0.28);
+  margin-bottom: 0.5rem;
+}
+
+/* Glitch layers on hover */
+#game-title::before,
+#game-title::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+#game-title:hover::before {
+  animation: glitch-a 0.28s steps(2) infinite;
+  color: #a0a8ff;
+  opacity: 0.55;
+  left: 2px;
+}
+
+#game-title:hover::after {
+  animation: glitch-b 0.28s steps(2) infinite;
+  color: #ff8888;
+  opacity: 0.4;
+  left: -2px;
+}
+
+@keyframes glitch-a {
+  0%   { clip-path: inset(0 0 88% 0); }
+  25%  { clip-path: inset(45% 0 35% 0); }
+  50%  { clip-path: inset(75% 0 8% 0); }
+  75%  { clip-path: inset(15% 0 65% 0); }
+  100% { clip-path: inset(55% 0 25% 0); }
+}
+
+@keyframes glitch-b {
+  0%   { clip-path: inset(55% 0 25% 0); }
+  25%  { clip-path: inset(20% 0 55% 0); }
+  50%  { clip-path: inset(8% 0 82% 0); }
+  75%  { clip-path: inset(68% 0 18% 0); }
+  100% { clip-path: inset(0 0 88% 0); }
+}
+
+.tagline {
+  font-size: 0.68rem;
+  letter-spacing: 0.35em;
+  color: var(--dim);
+  text-transform: uppercase;
+}
+
+/* ── How-to-play list ───────────────────────────────────────── */
+.how-to-play {
+  list-style: none;
+  text-align: left;
+  border-left: 2px solid var(--accent);
+  padding-left: 1rem;
+  margin: 0 auto 1.8rem;
+  max-width: 420px;
+}
+
+.how-to-play li {
+  font-size: 0.75rem;
+  line-height: 1.85;
+  color: var(--text);
+}
+
+.how-to-play li.tip {
+  color: var(--dim);
+  font-style: italic;
+  margin-top: 0.3rem;
+}
+
+.how-to-play em {
+  color: var(--accent);
+  font-style: normal;
+}
+
+.how-to-play kbd {
+  display: inline-block;
+  padding: 0.05em 0.35em;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid var(--dim);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 0.72em;
+}
+
+/* ── Screen headings & copy ─────────────────────────────────── */
+.screen-inner h2 {
+  font-size: clamp(1.1rem, 3vw, 1.7rem);
+  font-weight: 400;
+  letter-spacing: 0.22em;
+  color: var(--bright);
+  margin-bottom: 1rem;
+}
+
+.screen-inner p {
+  font-size: 0.78rem;
+  line-height: 1.7;
+  color: var(--text);
+  margin-bottom: 0.4rem;
+}
+
+.screen-inner .sub {
+  font-size: 0.68rem;
+  color: var(--dim);
+  margin-top: 0.4rem;
+}
+
+.col-danger  { color: var(--danger)  !important; }
+.col-success { color: var(--success) !important; }
+
+/* ── Primary button ─────────────────────────────────────────── */
+.btn-primary {
+  display: inline-block;
+  margin-top: 1.8rem;
+  padding: 0.65rem 2rem;
+  background: transparent;
+  border: 1px solid var(--text);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s, color 0.18s, box-shadow 0.18s;
+}
+
+.btn-primary:hover {
+  background: rgba(255,255,255,0.07);
+  border-color: var(--bright);
+  color: var(--bright);
+  box-shadow: 0 0 16px rgba(180, 180, 220, 0.14);
+}
+
+.btn-primary:active {
+  transform: scale(0.975);
+}
+
+/* ── Utility ────────────────────────────────────────────────── */
+.hidden {
+  display: none !important;
+}
+
+/* ── Mobile tweaks ──────────────────────────────────────────── */
+@media (max-width: 540px) {
+  #hud { padding: 0.65rem 0.9rem; gap: 0.6rem; }
+  #btn-reverse { padding: 0.45rem 0.7rem; }
+  .screen-inner { padding: 1.5rem 1rem; }
+  .how-to-play { font-size: 0.7rem; }
+}
