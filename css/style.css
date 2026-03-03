@@ -150,6 +150,25 @@ html, body {
   background: rgba(255,255,255,0.12);
 }
 
+#btn-quit {
+  pointer-events: all;
+  padding: 0.3rem 0.55rem;
+  background: transparent;
+  border: 1px solid rgba(80,80,90,0.4);
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+  margin-left: 0.3rem;
+}
+
+#btn-quit:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
 /* ── Stare ring ──────────────────────────────────────────────── */
 #stare-ring {
   position: absolute;

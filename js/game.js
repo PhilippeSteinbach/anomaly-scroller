@@ -1267,6 +1267,7 @@
       document.getElementById('btn-next')   .addEventListener('click', () => this._advanceLevel());
       document.getElementById('btn-restart').addEventListener('click', () => this._startGame());
       document.getElementById('btn-reverse').addEventListener('click', () => this._handleReverse());
+      document.getElementById('btn-quit')   .addEventListener('click', () => this._handleQuit());
 
       // Leaderboard
       document.getElementById('btn-leaderboard') .addEventListener('click', () => this._showLeaderboard());
@@ -1410,6 +1411,13 @@
         // No anomaly level — any reverse is a false alarm
         this._failLevel('false_alarm');
       }
+    }
+
+    _handleQuit() {
+      if (this.state !== STATE.PLAYING && this.state !== STATE.RETURNING) return;
+      if (!confirm('Quit current run and return to menu?')) return;
+      this.$hud.classList.add('hidden');
+      this._setState(STATE.MENU);
     }
 
     _onStareComplete() {
